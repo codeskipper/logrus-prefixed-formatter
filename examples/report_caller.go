@@ -17,12 +17,14 @@ func init() {
 	formatter := &prefixed.TextFormatter{
 		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
 			// this function is required when you want to introduce your custom format.
+			// scooped up for this example from https://trierra.dev/how-to-configure-a-golang-logger-logrus-for-production/
 			// In my case I wanted file and line to look like this `file="engine.go:141`
 			// but f.File provides a full path along with the file name.
 			// So in `formatFilePath()` function I just trimmed everything before the file name
-			// and added the line number in the end
+			// and added the line number at the end
 			return f.Function, fmt.Sprintf("%s:%d", formatFilePath(f.File), f.Line)
 		},
+		DisableColors: false,
 	}
 	log.SetFormatter(formatter)
 	log.Level = logrus.DebugLevel
@@ -43,13 +45,12 @@ func main() {
 			log.WithFields(logrus.Fields{
 				"omg":    true,
 				"number": 100,
-			}).Fatal("[main] The ice breaks!")
+			}).Fatal("The ice breaks!")
 		}
 	}()
 
 	// You could either provide a map key called `prefix` to add prefix
 	log.WithFields(logrus.Fields{
-		"prefix": "main",
 		"animal": "walrus",
 		"number": 8,
 	}).Debug("Started observing beach")
@@ -58,13 +59,13 @@ func main() {
 	log.WithFields(logrus.Fields{
 		"animal": "walrus",
 		"size":   10,
-	}).Debug("[main] A group of walrus emerges from the ocean")
+	}).Debug("A group of walrus emerges from the ocean")
 
 	// Warning message
 	log.WithFields(logrus.Fields{
 		"omg":    true,
 		"number": 122,
-	}).Warn("[main] The group's number increased tremendously!")
+	}).Warn("The group's number increased tremendously!")
 
 	// Information message
 	log.WithFields(logrus.Fields{
