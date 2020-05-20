@@ -2,6 +2,12 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../go-log-playground"
 		}
-	]
+	],
+	"settings": {
+		"go.useLanguageServer": true
+	}
 }
