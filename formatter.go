@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -17,7 +18,8 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-const defaultTimestampFormat = time.RFC3339
+// RFC3339 with millisecond precision
+const defaultTimestampFormat = "2006-01-02T15:04:05.999Z07:00"
 
 var (
 	baseTimestamp      time.Time    = time.Now()
@@ -27,9 +29,10 @@ var (
 		ErrorLevelStyle: "red",
 		FatalLevelStyle: "red",
 		PanicLevelStyle: "red",
-		DebugLevelStyle: "blue",
+		DebugLevelStyle: "magenta",
 		PrefixStyle:     "cyan",
-		TimestampStyle:  "black+h",
+		TimestampStyle:  "white",
+		//TimestampStyle:  "black+h",
 	}
 	noColorsColorScheme *compiledColorScheme = &compiledColorScheme{
 		InfoLevelColor:  ansi.ColorFunc(""),
@@ -42,12 +45,17 @@ var (
 		TimestampColor:  ansi.ColorFunc(""),
 	}
 	defaultCompiledColorScheme *compiledColorScheme = compileColorScheme(defaultColorScheme)
+
+	// get hold of the project basepath for caller field formatting
+	_, b, _, _ = runtime.Caller(0)
+	basepath   = filepath.Dir(b)
 )
 
 func miniTS() int {
 	return int(time.Since(baseTimestamp) / time.Second)
 }
 
+// ColorScheme holds the colors for each field that can be set
 type ColorScheme struct {
 	InfoLevelStyle  string
 	WarnLevelStyle  string
@@ -70,6 +78,7 @@ type compiledColorScheme struct {
 	TimestampColor  func(string) string
 }
 
+// TextFormatter holds the settings
 type TextFormatter struct {
 	// Set to true to bypass checking for a TTY before outputting colors.
 	ForceColors bool
@@ -106,8 +115,9 @@ type TextFormatter struct {
 	// with something else. For example: ', or `.
 	QuoteCharacter string
 
-	// Pad msg field with spaces on the right for display.
-	// The value for this parameter will be the size of padding.
+	// Pad msg field with spaces on the right, making it left aligned.
+	// so the next fields can be printed aligned on the same starting collumn.
+	// The value for this parameter will be the size of msg field.
 	// Its default value is zero, which means no padding will be applied for msg.
 	SpacePadding int
 
@@ -124,6 +134,10 @@ type TextFormatter struct {
 	CallerPrettyfier func(*runtime.Frame) (function string, file string)
 
 	CallerFormatter func(function, file string) string
+
+	// FieldSpacing is the number of spaces to print between the fields
+	// default is 3
+	FieldSpacing int
 
 	sync.Once
 }
@@ -158,6 +172,9 @@ func (f *TextFormatter) init(entry *logrus.Entry) {
 	if entry.Logger != nil {
 		f.isTerminal = f.checkIfTerminal(entry.Logger.Out)
 	}
+	if f.FieldSpacing == 0 {
+		f.FieldSpacing = 3
+	}
 }
 
 func (f *TextFormatter) checkIfTerminal(w io.Writer) bool {
@@ -169,10 +186,12 @@ func (f *TextFormatter) checkIfTerminal(w io.Writer) bool {
 	}
 }
 
+// SetColorScheme applies specified ColorScheme
 func (f *TextFormatter) SetColorScheme(colorScheme *ColorScheme) {
 	f.colorScheme = compileColorScheme(colorScheme)
 }
 
+// Format implements a custom formatter to process an Entry
 func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	var b *bytes.Buffer
 	var keys []string = make([]string, 0, len(entry.Data))
@@ -250,6 +269,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys []string, timestampFormat string, colorScheme *compiledColorScheme) {
 	var levelColor func(string) string
 	var levelText string
+
 	switch entry.Level {
 	case logrus.InfoLevel:
 		levelColor = colorScheme.InfoLevelColor
@@ -275,7 +295,9 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 		levelText = strings.ToUpper(levelText)
 	}
 
-	level := levelColor(fmt.Sprintf("%5s", levelText))
+	// levelFormat left-justified, append f.FieldSpacing number of spaces
+	levelFormat := fmt.Sprintf("%%-%ds", 5+f.FieldSpacing)
+	level := levelColor(fmt.Sprintf(levelFormat, levelText))
 	prefix := ""
 	message := entry.Message
 
@@ -291,7 +313,11 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 
 	messageFormat := "%s"
 	if f.SpacePadding != 0 {
+		// pad with spaces on the right rather than the left (left-justify the field)
 		messageFormat = fmt.Sprintf("%%-%ds", f.SpacePadding)
+	} else {
+		// left-justified, append spaces on the right
+		messageFormat = fmt.Sprintf("%%-%ds", len(message)+f.FieldSpacing)
 	}
 
 	caller := ""
@@ -304,10 +330,13 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 		}
 
 		if f.CallerFormatter != nil {
-			caller = f.CallerFormatter(funcVal, fileVal)
+			caller = f.CallerFormatter(fileVal, funcVal)
 		} else {
-			caller = fmt.Sprintf(" (%s: %s)", fileVal, funcVal)
+			fileVal = strings.TrimPrefix(fileVal, basepath+"/")
+			caller = fmt.Sprintf("%s", fileVal)
 		}
+		callerFmt := fmt.Sprintf("%%-%ds", len(caller)+f.FieldSpacing)
+		caller = fmt.Sprintf(callerFmt, caller)
 	}
 
 	if f.DisableTimestamp {
@@ -315,9 +344,13 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 	} else {
 		var timestamp string
 		if !f.FullTimestamp {
-			timestamp = fmt.Sprintf("[%04d]", miniTS())
+			timestamp = fmt.Sprintf("%04d", miniTS())
+			timeStampFmt := fmt.Sprintf("%%-%ds", 4+f.FieldSpacing) // left-justified, append f.FieldSpacing number of spaces
+			timestamp = fmt.Sprintf(timeStampFmt, timestamp)
 		} else {
-			timestamp = fmt.Sprintf("[%s]", entry.Time.Format(timestampFormat))
+			timestamp = fmt.Sprintf("%s", entry.Time.Format(timestampFormat))
+			timeStampFmt := fmt.Sprintf("%%-%ds", len(timestamp)+f.FieldSpacing) // left-justified, append f.FieldSpacing number of spaces
+			timestamp = fmt.Sprintf(timeStampFmt, timestamp)
 		}
 		fmt.Fprintf(b, "%s %s%s%s "+messageFormat, colorScheme.TimestampColor(timestamp), level, caller, prefix, message)
 	}
@@ -348,6 +381,11 @@ func extractCallerInfo(caller *runtime.Frame) (string, string) {
 	funcVal := caller.Function
 	fileVal := fmt.Sprintf("%s:%d", caller.File, caller.Line)
 	return funcVal, fileVal
+}
+
+// GetProjectPath returns the project root directory
+func GetProjectPath() string {
+	return basepath
 }
 
 func extractPrefix(msg string) (string, string) {

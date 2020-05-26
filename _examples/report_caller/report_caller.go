@@ -3,8 +3,6 @@
 package main
 
 import (
-	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -17,16 +15,23 @@ var log = logrus.New()
 func init() {
 	//formatter := new(prefixed.TextFormatter)
 	formatter := &prefixed.TextFormatter{
-		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-			// this function is required when you want to introduce your custom format.
-			// scooped up for this example from https://trierra.dev/how-to-configure-a-golang-logger-logrus-for-production/
-			// In my case I wanted file and line to look like this `file="engine.go:141`
-			// but f.File provides a full path along with the file name.
-			// So in `formatFilePath()` function I just trimmed everything before the file name
-			// and added the line number at the end
-			return f.Function, fmt.Sprintf("%s:%d", formatFilePath(f.File), f.Line)
-		},
-		DisableColors: false,
+		// CallerPrettyfier function is provided to let you introduce a custom format.
+		//CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+		// scooped up for this example from https://trierra.dev/how-to-configure-a-golang-logger-logrus-for-production/
+		// In my case I wanted file and line to look like this `file="engine.go:141`
+		// but f.File provides a full path along with the file name.
+		// So in `formatFilePath()` function I just trimmed everything before the file name
+		// and added the line number at the end
+		//	return f.Function, fmt.Sprintf("%s:%d", formatFilePath(f.File), f.Line)
+		//},
+
+		// CallerFormatter function lets you to introduce a custom format.
+		//CallerFormatter: func(fileVal string, funcVal string) (caller string) {
+
+		//	return fmt.Sprintf("(%s: %s)", fileVal, funcVal)
+		//},
+		DisableColors: true,
+		//FieldSpacing:  8,
 	}
 	log.SetFormatter(formatter)
 	log.Level = logrus.DebugLevel

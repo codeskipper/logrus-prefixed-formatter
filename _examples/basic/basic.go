@@ -2,13 +2,18 @@ package main
 
 import (
 	"github.com/sirupsen/logrus"
-	prefixed "github.com/x-cray/logrus-prefixed-formatter"
+	//prefixed "github.com/x-cray/logrus-prefixed-formatter"
+	prefixed "github.com/codeskipper/logrus-prefixed-formatter"
 )
 
 var log = logrus.New()
 
 func init() {
 	formatter := new(prefixed.TextFormatter)
+	formatter.FullTimestamp = true
+	//formatter.TimestampFormat = "2006-01-02T15:04:05.999Z07:00" // RFC3339 with millisecond precision
+	//formatter.DisableColors = true
+	//formatter.FieldSpacing = 3
 	log.Formatter = formatter
 	log.Level = logrus.DebugLevel
 }
